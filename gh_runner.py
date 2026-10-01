@@ -160,7 +160,7 @@ def cmd_fetch(a):
     d = meta["dir"]
     dst = os.path.join(RUNS_DIR, d)
     os.makedirs(dst, exist_ok=True)
-    for name in ("report.md", "transcript.md", "info.json", "sheet.jpg"):
+    for name in ("report.md", "transcript.md", "timeline.md", "analysis.json", "info.json", "sheet.jpg"):
         try:
             data = raw(f"results/{d}/{name}")
             open(os.path.join(dst, name), "wb").write(data)
@@ -288,9 +288,10 @@ def wait_for(run_id, timeout=10800):
         if time.time() - t0 > timeout:
             return "timeout"
 
-def dispatch_watch(inputs):
+def dispatch_watch(inputs, workflow=None):
+    wf = workflow or WORKFLOW
     before = {r["id"] for r in api(f"/repos/{OWNER_REPO}/actions/runs?per_page=20")["workflow_runs"]}
-    api(f"/repos/{OWNER_REPO}/actions/workflows/{WORKFLOW}/dispatches", "POST",
+    api(f"/repos/{OWNER_REPO}/actions/workflows/{wf}/dispatches", "POST",
         {"ref": "main", "inputs": inputs})
     for _ in range(30):
         time.sleep(4)
@@ -347,6 +348,69 @@ def cmd_prune(a):
         print("pruned", r["tag_name"])
     print(f"kept {min(len(rels), a.keep)} releases")
 
+
+# ------------------------------------------------------------------ deep (параллельный просмотр)
+def cmd_deep(a):
+    """Плотное покрытие: сценозависимые кадры + шарды Whisper/VLM на бесплатных раннерах."""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    run_dir = f"deep-{stamp}"
+    stage_dir = os.path.join(os.path.expanduser("~"), ".cache", "video-eye-stage", run_dir)
+    cmd = [sys.executable, os.path.join(HERE, "scripts", "stage.py"), "--url", a.url,
+           "--out-dir", stage_dir, "--every", str(a.every), "--max-frames", str(a.max_frames),
+           "--whisper-shards", str(a.whisper_shards), "--caption-shards", str(a.caption_shards),
+           "--tile", str(a.tile)]
+    print("шаг 1/4: подготовка в песочнице (скачивание, кадры, листы, аудио)")
+    r = subprocess.run(cmd)
+    if r.returncode != 0:
+        sys.exit("stage.py упал")
+    meta = json.load(open(os.path.join(stage_dir, "meta.json"), encoding="utf-8"))
+    print(f"  {meta['title']} | {meta['duration'] and round(meta['duration'])} с | "
+          f"кадров {meta['frame_count']} (сцен {meta['scene_changes']}) | "
+          f"листов {len(meta['sheets'])} | частей аудио {len(meta['audio_parts'])}")
+
+    tag = f"eye-deep-{stamp}"
+    print("шаг 2/4: загрузка ассетов в релиз", tag)
+    rel_id = create_release(tag, f"{meta.get('title')} [{stamp}]")
+    adir = os.path.join(stage_dir, "assets")
+    uploaded = 0
+    for f in sorted(os.listdir(adir)):
+        if f.endswith((".zip", ".opus", ".m4a", ".wav")):
+            upload_asset(rel_id, os.path.join(adir, f))
+            uploaded += 1
+    upload_asset(rel_id, os.path.join(stage_dir, "meta.json"))
+    print(f"  загружено файлов: {uploaded + 1}")
+
+    print("шаг 3/4: запуск шардов на раннерах GitHub")
+    jobs = [{"mode": "whisper", "shard": i, "of": len(meta["audio_parts"]), "model": a.whisper}
+            for i in range(len(meta["audio_parts"]))]
+    jobs += [{"mode": "caption", "shard": j["shard"], "of": len(meta["caption_shards"]),
+              "model": a.model} for j in meta["caption_shards"]]
+    rid, url = dispatch_watch({"asset_tag": tag, "run_dir": run_dir,
+                               "jobs_json": json.dumps(jobs), "whisper_model": a.whisper,
+                               "caption_model": a.model}, workflow="watch2.yml")
+    if not rid:
+        sys.exit("не удалось запустить workflow")
+    print(f"  job'ов: {len(jobs)} (whisper {len(meta['audio_parts'])}, VLM {len(meta['caption_shards'])})")
+    print("  ", url)
+
+    if not a.wait:
+        print("запущено. Следить: python3 gh_runner.py status")
+        return
+    print("шаг 4/4: жду завершения (это время шарда, а не сумма)")
+    conc = wait_for(rid)
+    print("итог:", conc)
+    class NS: run_id = "latest"
+    cmd_fetch(NS())
+    dst = os.path.join(RUNS_DIR, run_dir)
+    os.makedirs(dst, exist_ok=True)
+    link = os.path.join(dst, "sheets")
+    if not os.path.exists(link):
+        try:
+            os.symlink(os.path.join(stage_dir, "sheets"), link)
+        except OSError:
+            shutil.copytree(os.path.join(stage_dir, "sheets"), link)
+    print("листы кадров (смотреть как изображения):", link)
+
 # ------------------------------------------------------------------ status
 def cmd_status(a):
     r = api(f"/repos/{OWNER_REPO}")
@@ -382,11 +446,21 @@ def main():
     an.add_argument("--whisper", default="small")
     an.add_argument("--caption", default="off")
     an.add_argument("--wait", action="store_true")
+    dp = sub.add_parser("deep", help="плотный параллельный просмотр: кадры сцен + шарды Whisper/VLM")
+    dp.add_argument("--url", required=True)
+    dp.add_argument("--every", type=float, default=4.0, help="секунд между кадрами сетки")
+    dp.add_argument("--max-frames", type=int, default=700)
+    dp.add_argument("--whisper-shards", type=int, default=4)
+    dp.add_argument("--caption-shards", type=int, default=8)
+    dp.add_argument("--whisper", default="large-v3")
+    dp.add_argument("--model", default="qwen3-vl:2b")
+    dp.add_argument("--tile", type=int, default=320)
+    dp.add_argument("--wait", action="store_true")
     pr = sub.add_parser("prune")
     pr.add_argument("--keep", type=int, default=5)
     a = ap.parse_args()
     {"push": cmd_push, "run": cmd_run, "fetch": cmd_fetch, "status": cmd_status,
-     "analyze": cmd_analyze, "prune": cmd_prune}[a.cmd](a)
+     "analyze": cmd_analyze, "deep": cmd_deep, "prune": cmd_prune}[a.cmd](a)
 
 
 if __name__ == "__main__":
