@@ -1,0 +1,56 @@
+name: merge
+
+on:
+  workflow_dispatch:
+    inputs:
+      asset_tag: { required: true }
+      run_dir:   { required: true }
+      whisper_model: { default: "large-v3" }
+      caption_model: { default: "qwen3-vl:2b" }
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: свежий checkout
+        run: |
+          git fetch -q origin main
+          git reset --hard -q origin/main
+          echo "шарды:"; ls -la results/${{ inputs.run_dir }}/shards || true
+      - name: deps
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip install -q librosa numpy soundfile
+      - name: ассеты прогона
+        run: |
+          mkdir -p results/${{ inputs.run_dir }}/assets
+          for f in meta.json audio.opus; do
+            curl -sL "https://github.com/${{ github.repository }}/releases/download/${{ inputs.asset_tag }}/$f" \
+              -o "results/${{ inputs.run_dir }}/assets/$f" || true
+          done
+          ls -la results/${{ inputs.run_dir }}/assets
+      - name: merge
+        env:
+          RUN_DIR: ${{ inputs.run_dir }}
+          AUDIO_PATH: results/${{ inputs.run_dir }}/assets/audio.opus
+          WHISPER_MODEL: ${{ inputs.whisper_model }}
+          CAPTION_MODEL: ${{ inputs.caption_model }}
+        run: python scripts/merge_worker.py
+      - name: commit report
+        run: |
+          git config user.name  "video-eye[bot]"
+          git config user.email "video-eye@users.noreply.github.com"
+          for i in 1 2 3 4 5; do
+            git pull --rebase --autostash -q origin main || true
+            git add -f results/${{ inputs.run_dir }} || true
+            git commit -m "report ${{ inputs.run_dir }} [${{ github.run_id }}]" || true
+            if git push -q origin HEAD:main; then echo pushed; break; fi
+            sleep 5
+          done

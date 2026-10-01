@@ -6,7 +6,7 @@ merge_worker.py — финальная сборка на раннере: тра�
 Звук размечается по-настоящему: RMS/спектральная плоскостность/центроид по секундам (librosa,
 никакого Hugging Face) → речь / музыка / шум-аплодисменты / тишина.
 """
-import json, glob, os, subprocess, sys, math
+import json, glob, os, re, subprocess, sys, math
 
 AUDIO = os.environ.get("AUDIO_ASSET", "audio.opus")
 
@@ -82,7 +82,9 @@ def main():
     run_dir = os.environ.get("RUN_DIR", "current")
     base = os.path.join("results", run_dir)
     shards = sorted(glob.glob(os.path.join(base, "shards", "*.json")))
-    log(f"шардов: {len(shards)}")
+    log(f"шардов: {len(shards)} в {base}/shards")
+    if not shards:
+        log("шардов нет — проверь гонку коммитов (merge стартовал раньше записи шардов)")
 
     segs, caps, langs, speeds = [], [], set(), {}
     for p in shards:
@@ -95,13 +97,36 @@ def main():
         elif d.get("mode") == "caption":
             caps += d.get("captions", [])
             speeds[f"vlm:{d.get('model')}"] = None
+    # дедуп перекрытия шардов (аудио нарезано с наложением 2 c) + отсев галлюцинаций на тишине
+    counts = {}
+    for x in segs:
+        k = re.sub(r"[^0-9a-zа-яё]+", "", (x.get("text") or "").lower())
+        counts[k] = counts.get(k, 0) + 1
+    segs = [x for x in segs if len(x.get("text", "")) > 1
+            and counts[re.sub(r"[^0-9a-zа-яё]+", "", (x.get("text") or "").lower())] <= 3]
     segs.sort(key=lambda s: s["start"])
+    deduped, seen = [], set()
+    for x in segs:
+        key = (round(x["start"], 1), x["text"][:40])
+        if key in seen:
+            continue
+        seen.add(key)
+        if deduped and x["start"] < deduped[-1]["end"] - 0.5 and x["text"][:30] == deduped[-1]["text"][:30]:
+            continue
+        deduped.append(x)
+    segs = deduped
     caps = [c for c in caps if c.get("t") is not None]
     caps.sort(key=lambda c: c["t"])
     log(f"сегментов речи: {len(segs)}, подписей кадров: {len(caps)}")
 
-    meta = json.load(open(os.path.join(base, "meta.json"), encoding="utf-8")) if os.path.exists(
-        os.path.join(base, "meta.json")) else {}
+    meta = {}
+    for cand in (os.path.join(base, "meta.json"), os.path.join(base, "assets", "meta.json")):
+        if os.path.exists(cand):
+            meta = json.load(open(cand, encoding="utf-8"))
+            log("meta:", cand, "|", meta.get("title"))
+            break
+    else:
+        log("ВНИМАНИЕ: meta.json не найден — отчёт будет без названия и глав")
     speech_iv = [(s["start"], s["end"]) for s in segs]
 
     audio_path = os.environ.get("AUDIO_PATH", "")

@@ -75,6 +75,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
+      - name: свежий checkout (шарды могли запушиться после старта)
+        run: |
+          git fetch -q origin main
+          git reset --hard -q origin/main
+          ls results/${{ inputs.run_dir }}/shards || true
       - name: deps
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
