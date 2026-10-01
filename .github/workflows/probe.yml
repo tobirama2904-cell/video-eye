@@ -1,0 +1,58 @@
+name: probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "test URL"
+        default: "https://www.youtube.com/watch?v=jczeOaY5-Kg"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: deps
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip install -q --upgrade yt-dlp
+          yt-dlp --version
+      - name: try youtube access routes
+        run: |
+          U="${{ inputs.url }}"
+          try () {  # $1 = label, rest = extra args
+            local label="$1"; shift
+            if yt-dlp --no-warnings --no-playlist "$@" -f "bv*[height<=480]+ba/b[height<=480]" \
+                --max-filesize 30M -o "/tmp/out.mp4" "$U" >/tmp/dl.log 2>&1; then
+              echo "OK   | $label | $(ls -la /tmp/out.mp4 | awk '{print $5}') bytes"
+            else
+              echo "FAIL | $label | $(grep -oE 'ERROR: .{0,120}' /tmp/dl.log | tail -1)"
+            fi
+            rm -f /tmp/out.mp4
+          }
+          try "default"
+          for c in android ios web_safari mweb tv android_vr web_embedded tv_simply; do
+            try "client=$c" --extractor-args "youtube:player_client=$c"
+          done
+          try "ipv4" --force-ipv4
+          try "skip-webpage" --extractor-args "youtube:player_skip=webpage,configs"
+          try "formats-direct" -f "b[height<=480]"
+      - name: invidious / piped mirrors
+        run: |
+          for i in inv.nadeko.net yewtu.be invidious.nerdvpn.de vid.puffyan.us invidious.f5.si; do
+            printf "%-28s video-api=%s  " "$i" "$(curl -s -m 15 -o /dev/null -w '%{http_code}' https://$i/api/v1/videos/jczeOaY5-Kg)"
+            printf "piped=%s\n" "$(curl -s -m 15 -o /dev/null -w '%{http_code}' https://pipedapi.kavin.rocks/streams/jczeOaY5-Kg)"
+          done
+      - name: bgutil PO-token provider (needs node)
+        continue-on-error: true
+        run: |
+          node --version
+          pip install -q bgutil-ytdlp-pot-provider
+          git clone -q --depth 1 https://github.com/Brainicism/bgutil-ytdlp-pot-provider /tmp/bg
+          cd /tmp/bg/server && npm install --silent && npx tsc --silent || true
+          (nohup node build/main.js >/tmp/bg.log 2>&1 &) ; sleep 8
+          cd $GITHUB_WORKSPACE
+          yt-dlp --no-warnings -J "${{ inputs.url }}" >/dev/null 2>/tmp/e && echo "OK | bgutil PO token" || tail -3 /tmp/e
