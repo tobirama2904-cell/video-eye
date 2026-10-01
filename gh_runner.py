@@ -191,6 +191,161 @@ def cmd_fetch(a):
     print(json.dumps(meta, ensure_ascii=False, indent=2))
 
 
+
+# ------------------------------------------------------------------ local staging
+SANDBOX_WATCH = os.path.expanduser("~/skills/watch-video/watch.py")
+
+def frame_ts(name):
+    """0007_t=01-23.jpg / 0007_t=1-02-03.jpg -> seconds"""
+    m = re.search(r"t=(\d+)(?:-(\d+))?(?:-(\d+))?", name)
+    if not m:
+        return None
+    p = [int(x) for x in m.groups() if x is not None]
+    return p[0] * 60 + p[1] if len(p) == 2 else (p[0] * 3600 + p[1] * 60 + p[2] if len(p) == 3 else p[0])
+
+def ffmpeg_path():
+    from static_ffmpeg import run as sf
+    return sf.get_or_fetch_platform_executables_else_raise()[0]
+
+def stage_locally(url, stage, frames, width, start, end):
+    """download + sample frames in the sandbox (YouTube is reachable here), keep it cheap"""
+    os.makedirs(stage, exist_ok=True)
+    cmd = [sys.executable, SANDBOX_WATCH, url, "--out", stage, "--max-frames", str(frames),
+           "--width", str(width), "--whisper", "never", "--keep"]
+    if start: cmd += ["--start", start]
+    if end:   cmd += ["--end", end]
+    print("staging locally:", " ".join(cmd[-8:]))
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit("local stage failed:\n" + (r.stdout or "")[-800:] + (r.stderr or "")[-800:])
+    info = json.load(open(os.path.join(stage, "info.json"), encoding="utf-8"))
+    fdir = os.path.join(stage, "frames")
+    frames_list = [{"t": frame_ts(f), "file": f} for f in sorted(os.listdir(fdir)) if f.endswith(".jpg")]
+    media = None
+    mdir = os.path.join(stage, "media")
+    if os.path.isdir(mdir):
+        cands = [os.path.join(mdir, f) for f in os.listdir(mdir) if os.path.getsize(os.path.join(mdir, f)) > 1000]
+        media = max(cands, key=os.path.getsize) if cands else None
+
+    meta = {"title": info.get("title"), "uploader": info.get("uploader") or info.get("channel"),
+            "duration": info.get("duration"), "published": info.get("upload_date"),
+            "url": info.get("webpage_url") or url, "chapters": info.get("chapters") or [],
+            "description": (info.get("description") or "")[:4000], "frames": frames_list,
+            "start": start or "", "end": end or ""}
+    json.dump(meta, open(os.path.join(stage, "meta.json"), "w", encoding="utf-8"),
+              ensure_ascii=False, indent=2, default=str)
+
+    audio = os.path.join(stage, "audio.opus")
+    if media:
+        ff = ffmpeg_path()
+        r = subprocess.run([ff, "-v", "error", "-y", "-i", media, "-vn", "-ac", "1", "-ar", "16000",
+                            "-c:a", "libopus", "-b:a", "24k", audio], capture_output=True, text=True)
+        if not os.path.exists(audio):
+            audio = os.path.join(stage, "audio.m4a")
+            subprocess.run([ff, "-v", "error", "-y", "-i", media, "-vn", "-ac", "1", "-ar", "16000",
+                            "-c:a", "aac", "-b:a", "32k", audio], check=True)
+        shutil.rmtree(mdir, ignore_errors=True)          # media stays in the sandbox, only audio travels
+    zpath = os.path.join(stage, "frames.zip")
+    with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in sorted(os.listdir(fdir)):
+            z.write(os.path.join(fdir, f), f)
+    return meta, audio if os.path.exists(audio) else None, zpath
+
+
+def create_release(tag, title):
+    rel = api(f"/repos/{OWNER_REPO}/releases", "POST",
+              {"tag_name": tag, "name": title, "draft": False, "prerelease": True})
+    return rel["id"]
+
+def upload_asset(rel_id, path):
+    name = os.path.basename(path)
+    data = open(path, "rb").read()
+    req = urllib.request.Request(
+        f"https://uploads.github.com/repos/{OWNER_REPO}/releases/{rel_id}/assets?name={urlquote(name)}",
+        data=data, method="POST",
+        headers={"Authorization": f"token {token()}", "Content-Type": "application/octet-stream"})
+    with urllib.request.urlopen(req, timeout=600) as r:
+        out = json.load(r)
+    print(f"  uploaded {name}: {out.get('size')}B")
+
+def urlquote(s):
+    import urllib.parse
+    return urllib.parse.quote(s)
+
+def wait_for(run_id, timeout=10800):
+    t0 = time.time()
+    while True:
+        time.sleep(15)
+        r = api(f"/repos/{OWNER_REPO}/actions/runs/{run_id}")
+        print(f"  [{int(time.time()-t0):5d}s] {r['status']} / {r.get('conclusion')}", flush=True)
+        if r["status"] == "completed":
+            if r["conclusion"] != "success":
+                for j in api(f"/repos/{OWNER_REPO}/actions/runs/{run_id}/jobs")["jobs"]:
+                    for st in j.get("steps", []):
+                        print(f"    step {st['name']}: {st['conclusion']}")
+            return r["conclusion"]
+        if time.time() - t0 > timeout:
+            return "timeout"
+
+def dispatch_watch(inputs):
+    before = {r["id"] for r in api(f"/repos/{OWNER_REPO}/actions/runs?per_page=20")["workflow_runs"]}
+    api(f"/repos/{OWNER_REPO}/actions/workflows/{WORKFLOW}/dispatches", "POST",
+        {"ref": "main", "inputs": inputs})
+    for _ in range(30):
+        time.sleep(4)
+        for r in api(f"/repos/{OWNER_REPO}/actions/runs?per_page=20")["workflow_runs"]:
+            if r["id"] not in before:
+                return r["id"], r["html_url"]
+    return None, None
+
+def cmd_analyze(a):
+    """full pipeline: local download -> release assets -> free runner (whisper+vlm) -> fetch report"""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    stage = os.path.join(os.path.expanduser("~"), ".cache", "video-eye-stage", stamp)
+    meta, audio, zpath = stage_locally(a.url, stage, a.frames, a.width, a.start, a.end)
+    print(f"staged: '{meta['title']}'  {meta['duration'] and round(meta['duration'])}s  "
+          f"{len(meta['frames'])} frames  audio={os.path.basename(audio) if audio else '—'}")
+
+    tag = f"eye-{stamp}"
+    rel_id = create_release(tag, f"{meta.get('title')} [{stamp}]")
+    for p in (audio, zpath, os.path.join(stage, "meta.json")):
+        if p and os.path.exists(p):
+            upload_asset(rel_id, p)
+    print("release:", f"https://github.com/{OWNER_REPO}/releases/tag/{tag}")
+
+    rid, url = dispatch_watch({"asset_tag": tag, "whisper_model": a.whisper, "caption": a.caption})
+    if not rid:
+        sys.exit("dispatch failed")
+    print("run:", url)
+    if not a.wait:
+        return
+    conc = wait_for(rid)
+    print("conclusion:", conc)
+
+    # pull the report
+    class NS: run_id = "latest"
+    cmd_fetch(NS())
+    # frames already local: link them into ~/runs/<dir> for the agent to read
+    got = json.loads(raw("results/latest.json"))
+    dst = os.path.join(RUNS_DIR, got["dir"])
+    os.makedirs(dst, exist_ok=True)
+    link = os.path.join(dst, "frames")
+    if not os.path.exists(link):
+        try:
+            os.symlink(os.path.join(stage, "frames"), link)
+        except OSError:
+            shutil.copytree(os.path.join(stage, "frames"), link)
+    print("frames ready:", link)
+
+def cmd_prune(a):
+    rels = api(f"/repos/{OWNER_REPO}/releases?per_page=100")
+    rels.sort(key=lambda r: r["created_at"], reverse=True)
+    for r in rels[a.keep:]:
+        api(f"/repos/{OWNER_REPO}/releases/{r['id']}", "DELETE")
+        api(f"/repos/{OWNER_REPO}/git/refs/tags/{r['tag_name']}", "DELETE")
+        print("pruned", r["tag_name"])
+    print(f"kept {min(len(rels), a.keep)} releases")
+
 # ------------------------------------------------------------------ status
 def cmd_status(a):
     r = api(f"/repos/{OWNER_REPO}")
@@ -217,8 +372,20 @@ def main():
     f = sub.add_parser("fetch")
     f.add_argument("run_id", nargs="?", default="latest")
     sub.add_parser("status")
+    an = sub.add_parser("analyze", help="local download + free GitHub runner for the heavy models")
+    an.add_argument("--url", required=True)
+    an.add_argument("--start", default="")
+    an.add_argument("--end", default="")
+    an.add_argument("--frames", default=60)
+    an.add_argument("--width", default=768)
+    an.add_argument("--whisper", default="small")
+    an.add_argument("--caption", default="off")
+    an.add_argument("--wait", action="store_true")
+    pr = sub.add_parser("prune")
+    pr.add_argument("--keep", type=int, default=5)
     a = ap.parse_args()
-    {"push": cmd_push, "run": cmd_run, "fetch": cmd_fetch, "status": cmd_status}[a.cmd](a)
+    {"push": cmd_push, "run": cmd_run, "fetch": cmd_fetch, "status": cmd_status,
+     "analyze": cmd_analyze, "prune": cmd_prune}[a.cmd](a)
 
 
 if __name__ == "__main__":
