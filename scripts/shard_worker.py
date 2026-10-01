@@ -108,21 +108,31 @@ def do_caption(a):
     declared = {f["file"]: f["t"] for f in meta.get("frames", [])}
     files = sorted(f for f in os.listdir(fdir) if f.endswith(".jpg"))
     prompt = CAPTION_PROMPT_EN if a.model.startswith("moondream") else CAPTION_PROMPT_RU
+    def ask(name, prm, npred=64, extra=None):
+        b64 = base64.b64encode(open(os.path.join(fdir, name), "rb").read()).decode()
+        body_d = {"model": a.model, "prompt": prm, "images": [b64], "stream": False,
+                  "keep_alive": "30m",
+                  "options": {"temperature": 0.1, "num_predict": npred,
+                              "repeat_penalty": 1.3, "stop": ["\n\n"]}}
+        if a.model.startswith("qwen3"):
+            body_d["think"] = False           # у qwen3 иначе весь бюджет уходит в «размышления»
+        if extra:
+            body_d.update(extra)
+        req = urllib.request.Request("http://127.0.0.1:11434/api/generate",
+                                     data=json.dumps(body_d).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=180) as resp:
+            return json.loads(resp.read()).get("response", "").strip()
+
     caps, t0 = [], time.time()
     for i, name in enumerate(files, 1):
-        b64 = base64.b64encode(open(os.path.join(fdir, name), "rb").read()).decode()
-        body = json.dumps({"model": a.model, "prompt": prompt, "images": [b64], "stream": False,
-                           "keep_alive": "30m",
-                           "options": {"temperature": 0.1, "num_predict": 48,
-                                       "repeat_penalty": 1.3, "stop": ["\n\n"]}}).encode()
-        req = urllib.request.Request("http://127.0.0.1:11434/api/generate", data=body,
-                                     headers={"Content-Type": "application/json"})
         t0f = time.time()
         try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                txt = json.loads(resp.read()).get("response", "").strip()
+            txt = ask(name, prompt)
+            if not txt:                        # пусто → один быстрый повтор по-английски
+                txt = ask(name, CAPTION_PROMPT_EN, npred=56)
             if not txt:
-                txt = "(пустой ответ модели)"
+                txt = "(модель не ответила)"
         except Exception as e:
             txt = f"(ошибка: {type(e).__name__})"
         caps.append({"t": declared.get(name), "file": name, "text": txt,
