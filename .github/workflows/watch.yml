@@ -1,0 +1,83 @@
+name: watch
+
+# Free & unlimited: public repos get unlimited GitHub-hosted runner minutes (2-4 vCPU, 16 GB RAM).
+# No API keys. No Hugging Face. Whisper weights come from OpenAI's CDN, VLM weights from the Ollama registry.
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Video URL (YouTube/Vimeo/TikTok/X/...) or direct media link"
+        required: true
+      start:
+        description: "start MM:SS or H:MM:SS (empty = beginning)"
+        default: ""
+      end:
+        description: "end MM:SS or H:MM:SS (empty = end)"
+        default: ""
+      frames:
+        description: "how many frames to sample (hard cap 2 fps, <=200)"
+        default: "60"
+      width:
+        description: "frame width in px (1024+ to read on-screen text)"
+        default: "768"
+      whisper_model:
+        description: "transcript: tiny|base|small|medium|large-v3|off"
+        default: "small"
+      caption:
+        description: "per-frame VLM captions via Ollama: off|moondream|qwen2.5vl:3b"
+        default: "off"
+
+permissions:
+  contents: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: System deps (ffmpeg)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: Python deps
+        run: |
+          python -m pip install -q --upgrade pip
+          pip install -q yt-dlp
+          pip install -q torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -q openai-whisper
+
+      - name: Watch the video
+        env:
+          VID_URL: ${{ inputs.url }}
+          VID_START: ${{ inputs.start }}
+          VID_END: ${{ inputs.end }}
+          VID_FRAMES: ${{ inputs.frames }}
+          VID_WIDTH: ${{ inputs.width }}
+          WHISPER_MODEL: ${{ inputs.whisper_model }}
+          CAPTION_MODE: ${{ inputs.caption }}
+          RUN_LABEL: ${{ github.run_id }}
+        run: python scripts/watch_job.py
+
+      - name: Upload frames
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frames-${{ github.run_id }}
+          path: results/*/frames/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Commit report back to the repo
+        if: always()
+        run: |
+          git config user.name  "video-eye[bot]"
+          git config user.email "video-eye@users.noreply.github.com"
+          git add -f results 2>/dev/null || true
+          git commit -m "run ${{ github.run_id }}: ${{ inputs.url }}" || echo "nothing to commit"
+          git push

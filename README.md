@@ -1,2 +1,39 @@
 # video-eye
-Free, unlimited video-watching pipeline: frames + transcript + local VLM, runs on GitHub Actions public runners
+
+**Бесплатный безлимитный «глаз» для агента: посмотреть видео от А до Я.**
+
+Два уровня, оба без API-ключей и **без Hugging Face**:
+
+| Уровень | Где считает | Лимиты | Что делает |
+|---|---|---|---|
+| `local_watch.py` (в сендбоксе) | ваш CPU | нет | кадры + быстрый транскрипт, за секунды |
+| GitHub Actions (**этот репозиторий**) | бесплатные раннеры GitHub | публичный репозиторий → **минуты не ограничены** (2–4 vCPU, 16 ГБ RAM) | много кадров, Whisper, локальная VLM-подпись кадров, контактный лист |
+
+Модели тянутся не с Hugging Face:
+- Whisper (.pt) — с CDN OpenAI: `openaipublic.azureedge.net`
+- VLM для подписи кадров — из реестра Ollama: `registry.ollama.ai` (`moondream`, `qwen2.5vl:3b`)
+
+## Запуск с раннера GitHub
+
+```bash
+export GH_TOKEN=<токен с правами repo + workflow>
+python3 gh_runner.py push                         # синхронизировать этот каталог в репозиторий
+python3 gh_runner.py run --url "https://youtu.be/XXXX" --frames 80 --width 1024 \
+       --whisper small --caption qwen2.5vl:3b --wait
+python3 gh_runner.py fetch                        # report.md, transcript.md, sheet.jpg, кадры
+```
+
+Результаты каждого прогона складываются в `results/<дата>-<название>/` и коммитятся обратно в репозиторий
+(кадры — в artifact, чтобы репозиторий не пух).
+
+## Что получается
+
+- `report.md` — метаданные, главы, подписи кадров от VLM, полный транскрипт с таймкодами, индекс кадров
+- `transcript.md` — только речь, построчно с таймкодами
+- `frames/*.jpg` — кадры с таймкодом в имени
+- `sheet.jpg` — контактный лист (сетка кадров)
+
+## Если хочется полностью офлайн
+
+Ничего не нужно: раннеры GitHub сами по себе бесплатны и не требуют ни ключей, ни карты.
+Публичный репозиторий = безлимитные минуты, приватный на Free — 2 000 минут/мес (тоже бесплатно).
