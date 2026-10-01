@@ -56,7 +56,11 @@ python3 gh_runner.py prune --keep 5          # подчистить старые
 | Задача | Модель | Откуда веса | Время на 3-мин видео |
 |---|---|---|---|
 | Транскрипт | Whisper `tiny…large-v3` (openai-whisper) | `openaipublic.azureedge.net` | small ≈ 1 мин |
-| Подписи кадров | `moondream` / `qwen2.5vl:3b` / `llava:7b` (Ollama) | `registry.ollama.ai` | moondream ≈ 3–5 с/кадр |
+| Подписи кадров | `qwen2.5vl:3b` (рекомендуется) / `moondream` / `llava:7b` (Ollama) | `registry.ollama.ai` | qwen2.5vl ≈ 30–50 с/кадр на CPU, moondream быстрее, но зацикливается |
+
+**Проверенные режимы.** `--caption off` (только Whisper): 3-минутное видео → ~2 минуты на раннере.
+`--caption qwen2.5vl:3b`: +25 минут на 30 кадров. Для часовых видео разумнее `off`, а кадры
+читать самому (или гнать VLM по выбранному окну через `--start/--end`).
 
 ## Что получается
 
