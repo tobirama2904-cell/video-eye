@@ -1,0 +1,298 @@
+{
+ "title": "История Истаравшана",
+ "uploader": "Axi",
+ "duration": 193.0,
+ "published": "20200514",
+ "url": "https://www.youtube.com/watch?v=jczeOaY5-Kg",
+ "chapters": [],
+ "description": "История Истаравшана",
+ "frames": [
+  {
+   "t": 0.0,
+   "file": "f_00001.jpg",
+   "scene": false
+  },
+  {
+   "t": 4.0,
+   "file": "f_00002.jpg",
+   "scene": false
+  },
+  {
+   "t": 8.0,
+   "file": "f_00003.jpg",
+   "scene": false
+  },
+  {
+   "t": 12.0,
+   "file": "f_00004.jpg",
+   "scene": false
+  },
+  {
+   "t": 16.0,
+   "file": "f_00005.jpg",
+   "scene": false
+  },
+  {
+   "t": 20.0,
+   "file": "f_00006.jpg",
+   "scene": false
+  },
+  {
+   "t": 24.0,
+   "file": "f_00007.jpg",
+   "scene": true
+  },
+  {
+   "t": 28.0,
+   "file": "f_00008.jpg",
+   "scene": false
+  },
+  {
+   "t": 32.0,
+   "file": "f_00009.jpg",
+   "scene": false
+  },
+  {
+   "t": 36.0,
+   "file": "f_00010.jpg",
+   "scene": true
+  },
+  {
+   "t": 40.0,
+   "file": "f_00011.jpg",
+   "scene": false
+  },
+  {
+   "t": 44.0,
+   "file": "f_00012.jpg",
+   "scene": false
+  },
+  {
+   "t": 48.0,
+   "file": "f_00013.jpg",
+   "scene": true
+  },
+  {
+   "t": 52.0,
+   "file": "f_00014.jpg",
+   "scene": false
+  },
+  {
+   "t": 56.0,
+   "file": "f_00015.jpg",
+   "scene": false
+  },
+  {
+   "t": 60.0,
+   "file": "f_00016.jpg",
+   "scene": false
+  },
+  {
+   "t": 64.0,
+   "file": "f_00017.jpg",
+   "scene": false
+  },
+  {
+   "t": 68.0,
+   "file": "f_00018.jpg",
+   "scene": false
+  },
+  {
+   "t": 72.0,
+   "file": "f_00019.jpg",
+   "scene": false
+  },
+  {
+   "t": 76.0,
+   "file": "f_00020.jpg",
+   "scene": true
+  },
+  {
+   "t": 80.0,
+   "file": "f_00021.jpg",
+   "scene": false
+  },
+  {
+   "t": 84.0,
+   "file": "f_00022.jpg",
+   "scene": false
+  },
+  {
+   "t": 88.0,
+   "file": "f_00023.jpg",
+   "scene": true
+  },
+  {
+   "t": 92.0,
+   "file": "f_00024.jpg",
+   "scene": false
+  },
+  {
+   "t": 96.0,
+   "file": "f_00025.jpg",
+   "scene": false
+  },
+  {
+   "t": 100.0,
+   "file": "f_00026.jpg",
+   "scene": false
+  },
+  {
+   "t": 104.0,
+   "file": "f_00027.jpg",
+   "scene": false
+  },
+  {
+   "t": 108.0,
+   "file": "f_00028.jpg",
+   "scene": false
+  },
+  {
+   "t": 112.0,
+   "file": "f_00029.jpg",
+   "scene": true
+  },
+  {
+   "t": 116.0,
+   "file": "f_00030.jpg",
+   "scene": false
+  },
+  {
+   "t": 120.0,
+   "file": "f_00031.jpg",
+   "scene": false
+  },
+  {
+   "t": 124.0,
+   "file": "f_00032.jpg",
+   "scene": true
+  },
+  {
+   "t": 128.0,
+   "file": "f_00033.jpg",
+   "scene": false
+  },
+  {
+   "t": 132.0,
+   "file": "f_00034.jpg",
+   "scene": false
+  },
+  {
+   "t": 136.0,
+   "file": "f_00035.jpg",
+   "scene": true
+  },
+  {
+   "t": 140.0,
+   "file": "f_00036.jpg",
+   "scene": false
+  },
+  {
+   "t": 144.0,
+   "file": "f_00037.jpg",
+   "scene": false
+  },
+  {
+   "t": 148.0,
+   "file": "f_00038.jpg",
+   "scene": false
+  },
+  {
+   "t": 152.0,
+   "file": "f_00039.jpg",
+   "scene": false
+  },
+  {
+   "t": 156.0,
+   "file": "f_00040.jpg",
+   "scene": false
+  },
+  {
+   "t": 160.0,
+   "file": "f_00041.jpg",
+   "scene": true
+  },
+  {
+   "t": 164.0,
+   "file": "f_00042.jpg",
+   "scene": false
+  },
+  {
+   "t": 168.0,
+   "file": "f_00043.jpg",
+   "scene": false
+  },
+  {
+   "t": 172.0,
+   "file": "f_00044.jpg",
+   "scene": true
+  },
+  {
+   "t": 176.0,
+   "file": "f_00045.jpg",
+   "scene": false
+  },
+  {
+   "t": 180.0,
+   "file": "f_00046.jpg",
+   "scene": false
+  },
+  {
+   "t": 184.0,
+   "file": "f_00047.jpg",
+   "scene": true
+  },
+  {
+   "t": 188.0,
+   "file": "f_00048.jpg",
+   "scene": false
+  }
+ ],
+ "frame_count": 48,
+ "scene_changes": 11,
+ "sheets": [
+  "sheet-00.jpg",
+  "sheet-01.jpg"
+ ],
+ "sample_every_s": 4.0,
+ "audio": "audio.opus",
+ "audio_parts": [
+  {
+   "file": "audio-part-0.opus",
+   "start": 0.0,
+   "end": 96.5
+  },
+  {
+   "file": "audio-part-1.opus",
+   "start": 96.5,
+   "end": 193.01
+  }
+ ],
+ "caption_shards": [
+  {
+   "shard": 0,
+   "count": 24,
+   "file": "frames-shard-0.zip",
+   "size": 752002
+  },
+  {
+   "shard": 1,
+   "count": 24,
+   "file": "frames-shard-1.zip",
+   "size": 699126
+  }
+ ],
+ "detected_scene_times": [
+  26.0,
+  38.0,
+  50.0,
+  75.0,
+  87.0,
+  111.0,
+  123.0,
+  135.0,
+  159.0,
+  171.0,
+  183.0
+ ]
+}

@@ -1,0 +1,200 @@
+{
+ "segments": [],
+ "captions": [],
+ "audio_events": [
+  {
+   "start": 1,
+   "end": 5,
+   "label": "музыка",
+   "peak_db": -29.77999496459961,
+   "flatness": 0.0,
+   "centroid": 1007
+  },
+  {
+   "start": 6,
+   "end": 14,
+   "label": "музыка",
+   "peak_db": -29.44420051574707,
+   "flatness": 0.001,
+   "centroid": 1579
+  },
+  {
+   "start": 15,
+   "end": 25,
+   "label": "музыка",
+   "peak_db": -29.273937225341797,
+   "flatness": 0.037,
+   "centroid": 3403
+  },
+  {
+   "start": 26,
+   "end": 29,
+   "label": "музыка",
+   "peak_db": -28.652286529541016,
+   "flatness": 0.001,
+   "centroid": 1288
+  },
+  {
+   "start": 29,
+   "end": 31,
+   "label": "фон",
+   "peak_db": -36.35443878173828,
+   "flatness": 0.005,
+   "centroid": 1992
+  },
+  {
+   "start": 31,
+   "end": 183,
+   "label": "тишина",
+   "peak_db": -74.1874771118164,
+   "flatness": 0.127,
+   "centroid": 5526
+  },
+  {
+   "start": 188,
+   "end": 190,
+   "label": "фон",
+   "peak_db": -32.78567886352539,
+   "flatness": 0.542,
+   "centroid": 5289
+  },
+  {
+   "start": 192,
+   "end": 194,
+   "label": "тишина",
+   "peak_db": -112.35020446777344,
+   "flatness": 0.127,
+   "centroid": 5526
+  }
+ ],
+ "timeline": [
+  {
+   "t": 0,
+   "speech": "",
+   "audio": "музыка",
+   "visual": []
+  },
+  {
+   "t": 10,
+   "speech": "",
+   "audio": "музыка",
+   "visual": []
+  },
+  {
+   "t": 20,
+   "speech": "",
+   "audio": "музыка, фон",
+   "visual": []
+  },
+  {
+   "t": 30,
+   "speech": "",
+   "audio": "фон, тишина",
+   "visual": []
+  },
+  {
+   "t": 40,
+   "speech": "",
+   "audio": "тишина",
+   "visual": []
+  },
+  {
+   "t": 50,
+   "speech": "",
+   "audio": "тишина",
+   "visual": []
+  },
+  {
+   "t": 60,
+   "speech": "",
+   "audio": "тишина",
+   "visual": []
+  },
+  {
+   "t": 70,
+   "speech": "",
+   "audio": "тишина",
+   "visual": []
+  },
+  {
+   "t": 80,
+   "speech": "",
+   "audio": "тишина",
+   "visual": []
+  },
+  {
+   "t": 90,
+   "speech": "",
+   "audio": "тишина",
+   "visual": []
+  },
+  {
+   "t": 100,
+   "speech": "",
+   "audio": "тишина",
+   "visual": []
+  },
+  {
+   "t": 110,
+   "speech": "",
+   "audio": "тишина",
+   "visual": []
+  },
+  {
+   "t": 120,
+   "speech": "",
+   "audio": "тишина",
+   "visual": []
+  },
+  {
+   "t": 130,
+   "speech": "",
+   "audio": "тишина",
+   "visual": []
+  },
+  {
+   "t": 140,
+   "speech": "",
+   "audio": "тишина",
+   "visual": []
+  },
+  {
+   "t": 150,
+   "speech": "",
+   "audio": "тишина",
+   "visual": []
+  },
+  {
+   "t": 160,
+   "speech": "",
+   "audio": "тишина",
+   "visual": []
+  },
+  {
+   "t": 170,
+   "speech": "",
+   "audio": "тишина",
+   "visual": []
+  },
+  {
+   "t": 180,
+   "speech": "",
+   "audio": "тишина, фон",
+   "visual": []
+  },
+  {
+   "t": 190,
+   "speech": "",
+   "audio": "тишина",
+   "visual": []
+  },
+  {
+   "t": 200,
+   "speech": "",
+   "audio": "",
+   "visual": []
+  }
+ ],
+ "speed": {},
+ "languages": []
+}
