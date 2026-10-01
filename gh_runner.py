@@ -11,7 +11,7 @@ backend for the heavy work (frames, Whisper, local VLM captions).
 
 Public repo => unlimited free runner minutes. No API keys, no Hugging Face.
 """
-import argparse, io, json, os, shutil, subprocess, sys, time, urllib.request, zipfile
+import argparse, io, json, os, re, shutil, subprocess, sys, time, urllib.request, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OWNER_REPO = os.environ.get("VIDEO_EYE_REPO", "tobirama2904-cell/video-eye")
@@ -144,7 +144,8 @@ def cmd_run(a):
 
 # ------------------------------------------------------------------ fetch
 def raw(path):
-    url = f"https://raw.githubusercontent.com/{OWNER_REPO}/main/{path}"
+    import urllib.parse
+    url = f"https://raw.githubusercontent.com/{OWNER_REPO}/main/{urllib.parse.quote(path, safe='/')}"
     req = urllib.request.Request(url, headers={"Authorization": f"token {token()}"})
     with urllib.request.urlopen(req, timeout=60) as r:
         return r.read()

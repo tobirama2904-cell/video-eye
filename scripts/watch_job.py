@@ -130,15 +130,24 @@ def ollama_setup(model, work):
     return env, None
 
 
+CAPTION_PROMPTS = {
+    # tiny English-centric models (moondream) loop when prompted in Russian
+    "moondream": ("Describe this video frame in 1-2 sentences. Say only what is visible: "
+                  "people, buildings, objects, text, place."),
+}
+DEFAULT_PROMPT = ("Опиши этот кадр из видео одним-двумя предложениями: кто и что в кадре, "
+                  "объекты, надписи, место. Только то, что реально видно на картинке.")
+
+
 def caption_frames(frames, fdir, model):
-    prompt = ("Опиши, что происходит в этом кадре видео: кто и что в кадре, объекты, надписи, "
-              "место действия. 1-2 предложения, только то, что видно.")
+    prompt = CAPTION_PROMPTS.get(model.split(":")[0], DEFAULT_PROMPT)
     out = []
     for i, (t, name) in enumerate(frames, 1):
         with open(os.path.join(fdir, name), "rb") as f:
             b64 = base64.b64encode(f.read()).decode()
         body = json.dumps({"model": model, "prompt": prompt, "images": [b64], "stream": False,
-                           "options": {"temperature": 0.1, "num_predict": 80}}).encode()
+                           "options": {"temperature": 0.1, "num_predict": 90,
+                                       "repeat_penalty": 1.3, "stop": ["\n\n", "()"]}}).encode()
         req = urllib.request.Request("http://127.0.0.1:11434/api/generate", data=body,
                                      headers={"Content-Type": "application/json"})
         try:
