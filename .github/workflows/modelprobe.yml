@@ -1,0 +1,97 @@
+name: modelprobe
+
+# Выясняет: какие vision-модели тянутся из реестра Ollama, как быстро они подписывают
+# кадр на 4 vCPU и сколько времени занимает Whisper на реальном аудио. Результаты — в лог.
+
+on:
+  workflow_dispatch:
+    inputs:
+      asset_tag:
+        description: "release tag с audio.opus + frames.zip"
+        default: "eye-20261001-073632"
+      models:
+        description: "модели через запятую"
+        default: "qwen3-vl:2b,gemma3:4b,qwen2.5vl:3b"
+      whisper:
+        description: "размеры whisper через запятую"
+        default: "medium"
+
+jobs:
+  models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: deps
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg curl
+          pip install -q torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -q openai-whisper pillow
+      - name: fetch assets
+        run: |
+          TAG="${{ inputs.asset_tag }}"
+          mkdir -p /tmp/a && cd /tmp/a
+          curl -sL "https://github.com/${{ github.repository }}/releases/download/$TAG/audio.opus" -o audio.opus
+          curl -sL "https://github.com/${{ github.repository }}/releases/download/$TAG/frames.zip" -o frames.zip
+          unzip -q frames.zip -d frames
+          ls -la; ls frames | head -3
+      - name: whisper speed
+        run: |
+          python3 - <<'PY'
+          import os, time, subprocess, json
+          cfg = os.environ.get("W_MODELS", "medium").split(",")
+          src = "/tmp/a/audio.opus"
+          wav = "/tmp/a/a16k.wav"
+          subprocess.run(["ffmpeg","-v","error","-y","-i",src,"-vn","-ac","1","-ar","16000",wav], check=True)
+          dur = float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration",
+                     "-of","default=nw=1:nk=1",wav],capture_output=True,text=True).stdout)
+          print(f"audio: {dur:.0f}s")
+          import whisper
+          for size in cfg:
+              t0=time.time(); m=whisper.load_model(size, download_root="/tmp/a/wh"); tl=time.time()-t0
+              t1=time.time(); r=m.transcribe(wav, verbose=False, fp16=False)
+              el=time.time()-t1
+              segs=r.get("segments",[])
+              words=sum(len(s.get("text","").split()) for s in segs)
+              print(f"WHISPER {size}: load {tl:.0f}s infer {el:.0f}s => {dur/el:.2f}x realtime, "
+                    f"{words} words, lang={r.get('language')}")
+              del m
+          PY
+        env:
+          W_MODELS: ${{ inputs.whisper }}
+      - name: ollama vision models
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          export OLLAMA_MODELS=/tmp/ollama
+          mkdir -p $OLLAMA_MODELS
+          (ollama serve > /tmp/ol.log 2>&1 &) ; sleep 8
+          IMG=$(ls /tmp/a/frames/*.jpg | sed -n '8p')
+          echo "тестовый кадр: $IMG"
+          for M in $(echo "${{ inputs.models }}" | tr ',' ' '); do
+            echo "=== $M ==="
+            if ! timeout 900 ollama pull "$M" 2>&1 | tail -2; then echo "PULL FAILED: $M"; continue; fi
+            for P in "ru" "en"; do
+              python3 - "$IMG" "$M" "$P" <<'PY'
+          import base64, json, sys, time, urllib.request
+          img, model, lang = sys.argv[1], sys.argv[2], sys.argv[3]
+          prompt = ("Опиши этот кадр из видео одним-двумя предложениями: кто и что в кадре, "
+                    "объекты, надписи, место. Только то, что видно." if lang == "ru" else
+                    "Describe this video frame in one or two sentences: people, objects, text, place.")
+          b64 = base64.b64encode(open(img,"rb").read()).decode()
+          body = json.dumps({"model": model, "prompt": prompt, "images":[b64], "stream": False,
+                             "options":{"temperature":0.1,"num_predict":80}}).encode()
+          req = urllib.request.Request("http://127.0.0.1:11434/api/generate", data=body,
+                                       headers={"Content-Type":"application/json"})
+          t0=time.time()
+          try:
+              with urllib.request.urlopen(req, timeout=900) as r:
+                  txt=json.loads(r.read()).get("response","").strip()
+              print(f"  [{model} | {lang}] {time.time()-t0:6.1f}s -> {txt[:160]}")
+          except Exception as e:
+              print(f"  [{model} | {lang}] FAILED {type(e).__name__}: {e}")
+          PY
+            done
+          done
+        env:
+          OLLAMA_HOST: 127.0.0.1:11434
