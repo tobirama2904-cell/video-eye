@@ -373,7 +373,7 @@ def cmd_deep(a):
           f"кадров {meta['frame_count']} (сцен {meta['scene_changes']}) | "
           f"листов {len(meta['sheets'])} | частей аудио {len(meta['audio_parts'])}")
 
-    tag = f"eye-deep-{stamp}"
+    tag = f"eye-{run_dir}"   # тег релиза = eye-<run_dir>, без расхождений
     print("шаг 2/4: загрузка ассетов в релиз", tag)
     rel_id = create_release(tag, f"{meta.get('title')} [{stamp}]")
     adir = os.path.join(stage_dir, "assets")
