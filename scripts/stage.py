@@ -181,6 +181,8 @@ def main():
     ap.add_argument("--scene-threshold", type=float, default=0.3)
     ap.add_argument("--whisper-shards", type=int, default=4)
     ap.add_argument("--caption-shards", type=int, default=8)
+    ap.add_argument("--caption-max-frames", type=int, default=240,
+                    help="сколько кадров вообще отправлять в VLM (остальные читает сам агент)")
     ap.add_argument("--sheet-cols", type=int, default=5)
     ap.add_argument("--sheet-rows", type=int, default=5)
     ap.add_argument("--tile", type=int, default=320)
@@ -229,12 +231,21 @@ def main():
     audio, parts, adur = prepare_audio(media, os.path.join(out, "assets"), a.whisper_shards)
     log(f"частей аудио: {len(parts)}, всего {mmss(adur)}")
 
-    # шарды кадров для VLM-подписей
+    # шарды кадров для VLM-подписей: сначала смены сцен, затем равномерная выборка
     log("упаковка шардов кадров…")
+    caption_set = [f for f in frames if scene_flags.get(f[1])]
+    rest = [f for f in frames if not scene_flags.get(f[1])]
+    room = max(0, a.caption_max_frames - len(caption_set))
+    if room and rest:
+        step_r = max(1, math.ceil(len(rest) / room))
+        caption_set += rest[::step_r]
+    caption_set = sorted(set(caption_set), key=lambda x: x[0])[:a.caption_max_frames]
+    log(f"кадров для VLM: {len(caption_set)} "
+        f"(смены сцен + выборка; остальные {len(frames)-len(caption_set)} агент смотрит сам)")
     sc_shards = []
-    step = math.ceil(len(frames) / a.caption_shards) if a.caption_shards else len(frames)
+    step = math.ceil(len(caption_set) / a.caption_shards) if a.caption_shards else len(caption_set)
     for i in range(a.caption_shards):
-        chunk = frames[i * step:(i + 1) * step]
+        chunk = caption_set[i * step:(i + 1) * step]
         if not chunk:
             break
         z = os.path.join(out, "assets", f"frames-shard-{i}.zip")
@@ -254,6 +265,7 @@ def main():
         "sample_every_s": a.every, "audio": os.path.basename(audio),
         "audio_parts": parts, "caption_shards": sc_shards,
         "detected_scene_times": [round(x, 2) for x in sc[:400]],
+        "caption_frames": [{"t": t, "file": f} for t, f in caption_set],
     }
     json.dump(meta, open(os.path.join(out, "meta.json"), "w", encoding="utf-8"),
               ensure_ascii=False, indent=1)

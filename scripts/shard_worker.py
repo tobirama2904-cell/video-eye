@@ -112,19 +112,24 @@ def do_caption(a):
     for i, name in enumerate(files, 1):
         b64 = base64.b64encode(open(os.path.join(fdir, name), "rb").read()).decode()
         body = json.dumps({"model": a.model, "prompt": prompt, "images": [b64], "stream": False,
-                           "options": {"temperature": 0.1, "num_predict": 90,
-                                       "repeat_penalty": 1.25, "stop": ["\n\n"]}}).encode()
+                           "keep_alive": "30m",
+                           "options": {"temperature": 0.1, "num_predict": 48,
+                                       "repeat_penalty": 1.3, "stop": ["\n\n"]}}).encode()
         req = urllib.request.Request("http://127.0.0.1:11434/api/generate", data=body,
                                      headers={"Content-Type": "application/json"})
+        t0f = time.time()
         try:
-            with urllib.request.urlopen(req, timeout=600) as resp:
+            with urllib.request.urlopen(req, timeout=120) as resp:
                 txt = json.loads(resp.read()).get("response", "").strip()
+            if not txt:
+                txt = "(пустой ответ модели)"
         except Exception as e:
             txt = f"(ошибка: {type(e).__name__})"
-        caps.append({"t": declared.get(name), "file": name, "text": txt})
-        if i % 5 == 0 or i == len(files):
+        caps.append({"t": declared.get(name), "file": name, "text": txt,
+                     "sec": round(time.time() - t0f, 1)})
+        if i % 3 == 0 or i == len(files):
             el = time.time() - t0
-            log(f"  {i}/{len(files)} ({el/i:.1f} с/кадр) → {txt[:60]}")
+            log(f"  {i}/{len(files)} ({el/i:.1f} с/кадр) → {txt[:70]}")
     log(f"готово: {len(caps)} подписей за {time.time()-t0:.0f}s")
     return {"mode": "caption", "shard": a.shard, "of": a.of, "model": a.model, "captions": caps}
 

@@ -354,15 +354,20 @@ def cmd_deep(a):
     """Плотное покрытие: сценозависимые кадры + шарды Whisper/VLM на бесплатных раннерах."""
     stamp = time.strftime("%Y%m%d-%H%M%S")
     run_dir = f"deep-{stamp}"
-    stage_dir = os.path.join(os.path.expanduser("~"), ".cache", "video-eye-stage", run_dir)
-    cmd = [sys.executable, os.path.join(HERE, "scripts", "stage.py"), "--url", a.url,
-           "--out-dir", stage_dir, "--every", str(a.every), "--max-frames", str(a.max_frames),
-           "--whisper-shards", str(a.whisper_shards), "--caption-shards", str(a.caption_shards),
-           "--tile", str(a.tile)]
-    print("шаг 1/4: подготовка в песочнице (скачивание, кадры, листы, аудио)")
-    r = subprocess.run(cmd)
-    if r.returncode != 0:
-        sys.exit("stage.py упал")
+    stage_dir = a.stage_dir or os.path.join(os.path.expanduser("~"), ".cache", "video-eye-stage", run_dir)
+    if a.stage_dir:
+        print(f"шаг 1/4: стейджинг беру готовый: {stage_dir}")
+        run_dir = f"big-{time.strftime('%Y%m%d-%H%M%S')}"
+    else:
+        cmd = [sys.executable, os.path.join(HERE, "scripts", "stage.py"), "--url", a.url,
+               "--out-dir", stage_dir, "--every", str(a.every), "--max-frames", str(a.max_frames),
+               "--whisper-shards", str(a.whisper_shards), "--caption-shards", str(a.caption_shards),
+               "--tile", str(a.tile),
+               "--caption-max-frames", str(a.caption_max_frames)]
+        print("шаг 1/4: подготовка в песочнице (скачивание, кадры, листы, аудио)")
+        r = subprocess.run(cmd)
+        if r.returncode != 0:
+            sys.exit("stage.py упал")
     meta = json.load(open(os.path.join(stage_dir, "meta.json"), encoding="utf-8"))
     print(f"  {meta['title']} | {meta['duration'] and round(meta['duration'])} с | "
           f"кадров {meta['frame_count']} (сцен {meta['scene_changes']}) | "
@@ -455,6 +460,8 @@ def main():
     dp.add_argument("--whisper", default="large-v3")
     dp.add_argument("--model", default="qwen3-vl:2b")
     dp.add_argument("--tile", type=int, default=320)
+    dp.add_argument("--caption-max-frames", type=int, default=240)
+    dp.add_argument("--stage-dir", help="готовый стейджинг (пропустить скачивание)")
     dp.add_argument("--wait", action="store_true")
     pr = sub.add_parser("prune")
     pr.add_argument("--keep", type=int, default=5)
