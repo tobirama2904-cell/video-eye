@@ -1,0 +1,95 @@
+name: probe2
+
+on:
+  workflow_dispatch:
+    inputs:
+      vid:
+        description: "youtube video id"
+        default: "jczeOaY5-Kg"
+
+jobs:
+  probe2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: deps
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg curl jq
+          pip install -q --upgrade yt-dlp
+      - name: instance health
+        run: |
+          VID="${{ inputs.vid }}"
+          curl -s -m 30 "https://api.invidious.io/instances.json?sort_by=health" -o /tmp/inst.json || true
+          python3 - <<'PY' > /tmp/insts.txt
+          import json
+          try:
+              data = json.load(open("/tmp/inst.json"))
+          except Exception:
+              data = []
+          hosts = []
+          for name, meta in data if isinstance(data, list) else []:
+              try:
+                  if meta.get("type") == "https" and meta.get("api") and meta.get("monitor", {}).get("uptime", 0) > 60:
+                      hosts.append("https://" + meta["uri"])
+              except Exception:
+                  pass
+          hosts += ["https://invidious.f5.si", "https://inv.nadeko.net", "https://yewtu.be"]
+          seen, out = set(), []
+          for h in hosts:
+              if h not in seen:
+                  seen.add(h); out.append(h)
+          print("\n".join(out[:40]))
+          PY
+          echo "candidates: $(wc -l < /tmp/insts.txt)"
+          while read -r H; do
+            CODE=$(curl -s -m 12 -o /tmp/v.json -w "%{http_code}" "$H/api/v1/videos/$VID")
+            if [ "$CODE" = "200" ]; then
+              echo "WORKS: $H"
+              python3 - "$H" <<'PY'
+          import json, sys
+          d = json.load(open("/tmp/v.json"))
+          print("  title:", d.get("title"))
+          print("  formatStreams:", [(f.get("itag"), f.get("resolution") or f.get("qualityLabel")) for f in d.get("formatStreams", [])][:6])
+          print("  adaptive:", len(d.get("adaptiveFormats", [])))
+          print("  captions:", [(c.get("language_code"), c.get("label")) for c in d.get("captions", [])][:6])
+          fs = d.get("formatStreams") or []
+          if fs:
+              open("/tmp/fmt_url.txt", "w").write(fs[0]["url"])
+              print("  first format url host:", fs[0]["url"].split("/")[2])
+          caps = d.get("captions") or []
+          if caps:
+              open("/tmp/cap_url.txt", "w").write(caps[0]["url"])
+          open("/tmp/first_instance.txt", "w").write(sys.argv[1])
+          PY
+              break
+            fi
+          done < /tmp/insts.txt
+      - name: download tests
+        run: |
+          VID="${{ inputs.vid }}"
+          INST=$(cat /tmp/first_instance.txt 2>/dev/null || echo "")
+          echo "instance: $INST"
+          if [ -n "$INST" ]; then
+            echo "-- A) proxied /latest_version?local=true itag=18"
+            curl -sL -m 60 -r 0-3000000 -o /tmp/a.mp4 -w "code=%{http_code} bytes=%{size_download}\n" \
+              "$INST/latest_version?id=$VID&itag=18&local=true" || true
+            file /tmp/a.mp4 2>/dev/null | cut -c1-120
+            echo "-- B) direct googlevideo url from api"
+            if [ -f /tmp/fmt_url.txt ]; then
+              curl -sL -m 60 -r 0-3000000 -o /tmp/b.mp4 -w "code=%{http_code} bytes=%{size_download}\n" "$(cat /tmp/fmt_url.txt)" || true
+              file /tmp/b.mp4 2>/dev/null | cut -c1-120
+            fi
+            echo "-- C) caption track"
+            if [ -f /tmp/cap_url.txt ]; then
+              CAP="$(cat /tmp/cap_url.txt)"
+              case "$CAP" in /*) CAP="$INST$CAP";; esac
+              curl -sL -m 30 -o /tmp/cap.txt -w "code=%{http_code} bytes=%{size_download}\n" "$CAP" || true
+              head -c 200 /tmp/cap.txt; echo
+            fi
+            echo "-- D) proxied itag=22 (720p muxed)"
+            curl -sL -m 60 -r 0-3000000 -o /tmp/d.mp4 -w "code=%{http_code} bytes=%{size_download}\n" \
+              "$INST/latest_version?id=$VID&itag=22&local=true" || true
+          fi
